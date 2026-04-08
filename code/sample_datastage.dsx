@@ -1,0 +1,350 @@
+#############################################################
+# IBM DataStage Export File
+# Job Name   : Customer_Data_Transformation
+# Version    : 11.7
+# Description: Sample job with transformations and rules
+# Created    : 2026-03-21
+#############################################################
+
+BEGIN HEADER
+  ExportVersion "3.0"
+  ExportedBy "DataStage Admin"
+  ExportDate "2026-03-21"
+  ServerName "DS_SERVER_01"
+  ProjectName "CUSTOMER_PROJECT"
+END HEADER
+
+########################################
+# JOB DEFINITION
+########################################
+BEGIN DSRECORD
+  Identifier "Job_Customer_Data_Transformation"
+  OLEType "DSJob"
+  JobType "Parallel"
+  JobName "Customer_Data_Transformation"
+  Description "Reads raw customer data, applies transformations and business rules, writes to target"
+
+  ########################################
+  # STAGE 1: SOURCE - Sequential File (Input)
+  ########################################
+  BEGIN STAGE
+    Identifier "SeqFile_Source"
+    OLEType "CCustomStage"
+    StageType "PxSequentialFile"
+    StageName "SeqFile_CustomerRaw"
+    Description "Reads raw customer CSV file"
+
+    BEGIN PROPERTIES
+      Property "filename"        Value "/data/input/customer_raw.csv"
+      Property "format"          Value "delimited"
+      Property "delimiter"       Value ","
+      Property "firstLineIsHeader" Value "true"
+      Property "nullValue"       Value "NULL"
+    END PROPERTIES
+
+    BEGIN OUTPUTPINS
+      BEGIN PIN
+        PinName "Output0"
+        BEGIN COLUMNS
+          Column Name="CUST_ID"       SqlType="INTEGER"   Nullable="false"
+          Column Name="FIRST_NAME"    SqlType="VARCHAR"   Length="50"   Nullable="true"
+          Column Name="LAST_NAME"     SqlType="VARCHAR"   Length="50"   Nullable="true"
+          Column Name="EMAIL"         SqlType="VARCHAR"   Length="100"  Nullable="true"
+          Column Name="PHONE"         SqlType="VARCHAR"   Length="20"   Nullable="true"
+          Column Name="DOB"           SqlType="VARCHAR"   Length="20"   Nullable="true"
+          Column Name="SALARY"        SqlType="DECIMAL"   Length="15"   Scale="2" Nullable="true"
+          Column Name="COUNTRY_CODE"  SqlType="VARCHAR"   Length="5"    Nullable="true"
+          Column Name="STATUS"        SqlType="VARCHAR"   Length="10"   Nullable="true"
+          Column Name="CREATED_DATE"  SqlType="VARCHAR"   Length="20"   Nullable="true"
+        END COLUMNS
+      END PIN
+    END OUTPUTPINS
+  END STAGE
+
+  ########################################
+  # STAGE 2: TRANSFORMER - Business Rules & Transformations
+  ########################################
+  BEGIN STAGE
+    Identifier "Transformer_Rules"
+    OLEType "CTransformStage"
+    StageType "Transformer"
+    StageName "Transformer_BusinessRules"
+    Description "Applies data cleansing, transformations and business rules"
+
+    BEGIN INPUTPINS
+      BEGIN PIN
+        PinName "Input0"
+        SourceStage "SeqFile_CustomerRaw"
+        SourcePin  "Output0"
+      END PIN
+    END INPUTPINS
+
+    BEGIN OUTPUTPINS
+
+      # ── Output Pin 0: Valid Records ─────────────────────
+      BEGIN PIN
+        PinName "Output0"
+        Description "Valid transformed customer records"
+
+        BEGIN COLUMNS
+
+          # RULE 1: Pass through Customer ID as-is
+          Column Name="CUST_ID"
+                 Derivation="SeqFile_CustomerRaw.CUST_ID"
+                 Description="Customer ID - no transformation"
+
+          # RULE 2: Trim and UPPER CASE first name
+          Column Name="FIRST_NAME"
+                 Derivation="Trim(UpperCase(SeqFile_CustomerRaw.FIRST_NAME))"
+                 Description="Trim spaces and convert to uppercase"
+
+          # RULE 3: Trim and UPPER CASE last name
+          Column Name="LAST_NAME"
+                 Derivation="Trim(UpperCase(SeqFile_CustomerRaw.LAST_NAME))"
+                 Description="Trim spaces and convert to uppercase"
+
+          # RULE 4: Lowercase and validate email format
+          Column Name="EMAIL"
+                 Derivation="If IsNull(SeqFile_CustomerRaw.EMAIL) Then 'NO_EMAIL@UNKNOWN.COM' Else LowerCase(Trim(SeqFile_CustomerRaw.EMAIL))"
+                 Description="Lowercase email, default if null"
+
+          # RULE 5: Mask phone - keep only last 4 digits
+          Column Name="PHONE_MASKED"
+                 Derivation="If Len(Trim(SeqFile_CustomerRaw.PHONE)) >= 4 Then 'XXXXXX' : Right(Trim(SeqFile_CustomerRaw.PHONE), 4) Else 'XXXXXXXXXX'"
+                 Description="Mask phone number for privacy - show only last 4 digits"
+
+          # RULE 6: Convert DOB string to Date format YYYY-MM-DD
+          Column Name="DOB_DATE"
+                 Derivation="StringToDate(SeqFile_CustomerRaw.DOB, '%DD/%MM/%YYYY')"
+                 Description="Convert DOB from DD/MM/YYYY string to Date type"
+
+          # RULE 7: Derive Age from DOB
+          Column Name="AGE"
+                 Derivation="DateDiff('year', StringToDate(SeqFile_CustomerRaw.DOB, '%DD/%MM/%YYYY'), CurrentDate())"
+                 Description="Calculate age in years from DOB"
+
+          # RULE 8: Age Band classification
+          Column Name="AGE_BAND"
+                 Derivation="If DateDiff('year', StringToDate(SeqFile_CustomerRaw.DOB,'%DD/%MM/%YYYY'), CurrentDate()) < 25 Then 'YOUTH' Else If DateDiff('year', StringToDate(SeqFile_CustomerRaw.DOB,'%DD/%MM/%YYYY'), CurrentDate()) < 40 Then 'ADULT' Else If DateDiff('year', StringToDate(SeqFile_CustomerRaw.DOB,'%DD/%MM/%YYYY'), CurrentDate()) < 60 Then 'MIDDLE_AGED' Else 'SENIOR'"
+                 Description="Classify customer into age bands"
+
+          # RULE 9: Salary null check and default
+          Column Name="SALARY"
+                 Derivation="If IsNull(SeqFile_CustomerRaw.SALARY) Then 0.00 Else SeqFile_CustomerRaw.SALARY"
+                 Description="Default salary to 0 if null"
+
+          # RULE 10: Salary Tier based on salary amount
+          Column Name="SALARY_TIER"
+                 Derivation="If SeqFile_CustomerRaw.SALARY < 30000 Then 'LOW' Else If SeqFile_CustomerRaw.SALARY < 70000 Then 'MEDIUM' Else If SeqFile_CustomerRaw.SALARY < 120000 Then 'HIGH' Else 'PREMIUM'"
+                 Description="Classify salary into tiers"
+
+          # RULE 11: Standardise Country Code to uppercase and default unknown
+          Column Name="COUNTRY_CODE"
+                 Derivation="If IsNull(SeqFile_CustomerRaw.COUNTRY_CODE) Then 'UNK' Else UpperCase(Trim(SeqFile_CustomerRaw.COUNTRY_CODE))"
+                 Description="Uppercase country code, default UNK if missing"
+
+          # RULE 12: Standardise Status values
+          Column Name="STATUS"
+                 Derivation="If UpperCase(Trim(SeqFile_CustomerRaw.STATUS)) = 'A' Then 'ACTIVE' Else If UpperCase(Trim(SeqFile_CustomerRaw.STATUS)) = 'I' Then 'INACTIVE' Else If UpperCase(Trim(SeqFile_CustomerRaw.STATUS)) = 'S' Then 'SUSPENDED' Else 'UNKNOWN'"
+                 Description="Expand status codes to full descriptions"
+
+          # RULE 13: Convert CREATED_DATE to timestamp
+          Column Name="CREATED_TIMESTAMP"
+                 Derivation="StringToTimestamp(SeqFile_CustomerRaw.CREATED_DATE, '%YYYY-%MM-%DD %HH:%NN:%SS')"
+                 Description="Convert created date string to timestamp"
+
+          # RULE 14: Add ETL load date
+          Column Name="ETL_LOAD_DATE"
+                 Derivation="CurrentDate()"
+                 Description="Audit column - date this record was loaded by ETL"
+
+          # RULE 15: Add ETL load timestamp
+          Column Name="ETL_LOAD_TIMESTAMP"
+                 Derivation="CurrentTimestamp()"
+                 Description="Audit column - timestamp this record was loaded"
+
+          # RULE 16: Derive Full Name
+          Column Name="FULL_NAME"
+                 Derivation="Trim(UpperCase(SeqFile_CustomerRaw.FIRST_NAME)) : ' ' : Trim(UpperCase(SeqFile_CustomerRaw.LAST_NAME))"
+                 Description="Concatenate first and last name"
+
+          # RULE 17: Data Quality Score
+          Column Name="DQ_SCORE"
+                 Derivation="(If Not IsNull(SeqFile_CustomerRaw.EMAIL) Then 20 Else 0) + (If Not IsNull(SeqFile_CustomerRaw.PHONE) Then 20 Else 0) + (If Not IsNull(SeqFile_CustomerRaw.DOB) Then 20 Else 0) + (If Not IsNull(SeqFile_CustomerRaw.SALARY) Then 20 Else 0) + (If Not IsNull(SeqFile_CustomerRaw.COUNTRY_CODE) Then 20 Else 0)"
+                 Description="Score 0-100 based on completeness of key fields"
+
+          # RULE 18: Record Valid Flag
+          Column Name="IS_VALID"
+                 Derivation="If Not IsNull(SeqFile_CustomerRaw.CUST_ID) And Not IsNull(SeqFile_CustomerRaw.LAST_NAME) And Not IsNull(SeqFile_CustomerRaw.EMAIL) Then 'Y' Else 'N'"
+                 Description="Y if mandatory fields are present, else N"
+
+        END COLUMNS
+
+        # ── Constraint: Route only VALID records to Output0 ──
+        Constraint "UpperCase(Trim(SeqFile_CustomerRaw.STATUS)) <> 'D' And Not IsNull(SeqFile_CustomerRaw.CUST_ID)"
+        Description "Filter out deleted records and records with no CUST_ID"
+
+      END PIN
+
+      # ── Output Pin 1: Rejected / Invalid Records ────────
+      BEGIN PIN
+        PinName "Output1"
+        Description "Rejected records that failed validation"
+
+        BEGIN COLUMNS
+          Column Name="CUST_ID"       Derivation="SeqFile_CustomerRaw.CUST_ID"
+          Column Name="FIRST_NAME"    Derivation="SeqFile_CustomerRaw.FIRST_NAME"
+          Column Name="LAST_NAME"     Derivation="SeqFile_CustomerRaw.LAST_NAME"
+          Column Name="EMAIL"         Derivation="SeqFile_CustomerRaw.EMAIL"
+          Column Name="REJECT_REASON"
+                 Derivation="If IsNull(SeqFile_CustomerRaw.CUST_ID) Then 'MISSING_CUST_ID' Else If IsNull(SeqFile_CustomerRaw.LAST_NAME) Then 'MISSING_LAST_NAME' Else If UpperCase(Trim(SeqFile_CustomerRaw.STATUS)) = 'D' Then 'DELETED_RECORD' Else 'UNKNOWN_REJECTION'"
+                 Description="Reason why this record was rejected"
+          Column Name="ETL_LOAD_TIMESTAMP" Derivation="CurrentTimestamp()"
+        END COLUMNS
+
+        # ── Constraint: Route INVALID records to Output1 ──
+        Constraint "IsNull(SeqFile_CustomerRaw.CUST_ID) Or IsNull(SeqFile_CustomerRaw.LAST_NAME) Or UpperCase(Trim(SeqFile_CustomerRaw.STATUS)) = 'D'"
+        Description "Capture deleted records and records missing mandatory fields"
+
+      END PIN
+
+    END OUTPUTPINS
+  END STAGE
+
+  ########################################
+  # STAGE 3: AGGREGATOR - Summarise by Country and Salary Tier
+  ########################################
+  BEGIN STAGE
+    Identifier "Aggregator_Summary"
+    OLEType "CCustomStage"
+    StageType "PxAggregator"
+    StageName "Aggregator_CountrySalary"
+    Description "Aggregate customer counts and avg salary by Country and Salary Tier"
+
+    BEGIN INPUTPINS
+      BEGIN PIN
+        PinName "Input0"
+        SourceStage "Transformer_BusinessRules"
+        SourcePin  "Output0"
+      END PIN
+    END INPUTPINS
+
+    BEGIN PROPERTIES
+      Property "groupByKeys"  Value "COUNTRY_CODE,SALARY_TIER"
+      Property "aggregations" Value "COUNT(CUST_ID) AS CUST_COUNT, AVG(SALARY) AS AVG_SALARY, MIN(SALARY) AS MIN_SALARY, MAX(SALARY) AS MAX_SALARY"
+    END PROPERTIES
+
+    BEGIN OUTPUTPINS
+      BEGIN PIN
+        PinName "Output0"
+        BEGIN COLUMNS
+          Column Name="COUNTRY_CODE"  SqlType="VARCHAR"  Length="5"
+          Column Name="SALARY_TIER"   SqlType="VARCHAR"  Length="10"
+          Column Name="CUST_COUNT"    SqlType="INTEGER"
+          Column Name="AVG_SALARY"    SqlType="DECIMAL"  Length="15" Scale="2"
+          Column Name="MIN_SALARY"    SqlType="DECIMAL"  Length="15" Scale="2"
+          Column Name="MAX_SALARY"    SqlType="DECIMAL"  Length="15" Scale="2"
+        END COLUMNS
+      END PIN
+    END OUTPUTPINS
+  END STAGE
+
+  ########################################
+  # STAGE 4: TARGET - Sequential File (Valid Records Output)
+  ########################################
+  BEGIN STAGE
+    Identifier "SeqFile_Target_Valid"
+    OLEType "CCustomStage"
+    StageType "PxSequentialFile"
+    StageName "SeqFile_CustomerCleansed"
+    Description "Writes cleansed and transformed customer records"
+
+    BEGIN INPUTPINS
+      BEGIN PIN
+        PinName "Input0"
+        SourceStage "Transformer_BusinessRules"
+        SourcePin  "Output0"
+      END PIN
+    END INPUTPINS
+
+    BEGIN PROPERTIES
+      Property "filename"          Value "/data/output/customer_cleansed.csv"
+      Property "format"            Value "delimited"
+      Property "delimiter"         Value ","
+      Property "firstLineIsHeader" Value "true"
+      Property "writeMode"         Value "overwrite"
+    END PROPERTIES
+  END STAGE
+
+  ########################################
+  # STAGE 5: TARGET - Sequential File (Rejected Records Output)
+  ########################################
+  BEGIN STAGE
+    Identifier "SeqFile_Target_Rejected"
+    OLEType "CCustomStage"
+    StageType "PxSequentialFile"
+    StageName "SeqFile_CustomerRejected"
+    Description "Writes rejected/invalid customer records for review"
+
+    BEGIN INPUTPINS
+      BEGIN PIN
+        PinName "Input0"
+        SourceStage "Transformer_BusinessRules"
+        SourcePin  "Output1"
+      END PIN
+    END INPUTPINS
+
+    BEGIN PROPERTIES
+      Property "filename"          Value "/data/output/customer_rejected.csv"
+      Property "format"            Value "delimited"
+      Property "delimiter"         Value ","
+      Property "firstLineIsHeader" Value "true"
+      Property "writeMode"         Value "overwrite"
+    END PROPERTIES
+  END STAGE
+
+  ########################################
+  # STAGE 6: TARGET - Sequential File (Aggregated Summary Output)
+  ########################################
+  BEGIN STAGE
+    Identifier "SeqFile_Target_Summary"
+    OLEType "CCustomStage"
+    StageType "PxSequentialFile"
+    StageName "SeqFile_CustomerSummary"
+    Description "Writes aggregated summary by country and salary tier"
+
+    BEGIN INPUTPINS
+      BEGIN PIN
+        PinName "Input0"
+        SourceStage "Aggregator_CountrySalary"
+        SourcePin  "Output0"
+      END PIN
+    END INPUTPINS
+
+    BEGIN PROPERTIES
+      Property "filename"          Value "/data/output/customer_summary.csv"
+      Property "format"            Value "delimited"
+      Property "delimiter"         Value ","
+      Property "firstLineIsHeader" Value "true"
+      Property "writeMode"         Value "overwrite"
+    END PROPERTIES
+  END STAGE
+
+END DSRECORD
+
+########################################
+# JOB PARAMETERS
+########################################
+BEGIN DSRECORD
+  OLEType "DSJobParameter"
+  BEGIN PARAMETERS
+    Parameter Name="INPUT_FILE"       Default="/data/input/customer_raw.csv"     Description="Source input file path"
+    Parameter Name="OUTPUT_DIR"       Default="/data/output"                     Description="Target output directory"
+    Parameter Name="ETL_BATCH_ID"     Default=""                                 Description="Batch run identifier"
+    Parameter Name="RUN_DATE"         Default=""                                 Description="Override run date YYYY-MM-DD"
+  END PARAMETERS
+END DSRECORD
+
+########################################
+# END OF DSX FILE
+########################################

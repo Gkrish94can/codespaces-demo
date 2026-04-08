@@ -1,0 +1,15 @@
+[2026-03-26 18:08:45] [INFO] START process='daily A1'
+[2026-03-26 18:08:45] [INFO] FOUND 'daily A1' — 1 script(s)
+[2026-03-26 18:08:45] [INFO] Script 1/1: daily_process.bat
+[2026-03-26 18:08:45] [ERROR] STOPPED at script 1 — escalating
+[2026-03-26 18:10:17] [INFO] START process='daily A1'
+[2026-03-26 18:10:17] [INFO] FOUND 'daily A1' — 1 script(s)
+[2026-03-26 18:10:17] [INFO] Script 1/1: daily_process.bat
+[2026-03-26 18:10:17] [INFO]   Attempt 1/3: daily_process.bat
+[2026-03-26 18:10:17] [ERROR] UNEXPECTED ERROR: 'charmap' codec can't encode character '\U0001f4a5' in position 32: character maps to <undefined>
+[2026-03-26 18:18:22] [INFO] START process='daily A1'
+[2026-03-26 18:18:22] [INFO] FOUND 'daily A1' â€” 1 script(s)
+[2026-03-26 18:18:22] [INFO] Script 1/1: daily_process.bat
+[2026-03-26 18:18:22] [INFO]   Attempt 1/3: daily_process.bat
+[2026-03-26 18:18:22] [INFO]   [SUCCESS] Attempt 1: daily_process.bat
+[2026-03-26 18:18:22] [INFO] END SUCCESS 'daily A1' | healed=0

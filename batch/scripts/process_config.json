@@ -1,0 +1,16 @@
+{
+  "processes": {
+    "daily A1": {
+      "description": "Daily process A1 - creates DLY CSV file",
+      "scripts": [
+        "daily_process.sh"
+      ]
+    },
+    "monthly B1": {
+      "description": "Monthly process B1 - creates MTH CSV file",
+      "scripts": [
+        "monthly_process.sh"
+      ]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
 	"servers": {
 		"bash-runner": {
-			"command": "/workspaces/codespaces-demo/myenv/bin/python.exe",
+			"command": "/workspaces/codespaces-demo/myenv/bin/python3",
 			"args": [
 				"/workspaces/codespaces-demo/selfheel_mcp_server.py"
 			],
